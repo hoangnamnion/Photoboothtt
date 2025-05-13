@@ -60,6 +60,9 @@
     <!-- Add FileSaver.js library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
+    <!-- Add Blob.js for better blob support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Blob.js/1.0.1/Blob.min.js"></script>
+
 </head>
 
 <body>
@@ -629,61 +632,57 @@
     // Function to handle mobile video download
     async function handleMobileDownload(videoUrl) {
         try {
-            // Check browser compatibility
-            if (!isBrowserCompatible()) {
-                alert('Trình duyệt của bạn không hỗ trợ tải video. Vui lòng sử dụng Chrome hoặc Safari mới nhất.');
-                return;
-            }
-
             // Show loading message
             const downloadLink = document.getElementById('downloadLink');
-            const originalText = downloadLink.textContent;
             downloadLink.textContent = 'Đang tải xuống...';
             downloadLink.style.pointerEvents = 'none';
 
-            // Fetch the video file with progress tracking
+            // Fetch the video file
             const response = await fetch(videoUrl);
             if (!response.ok) throw new Error('Network response was not ok');
             
-            // Get content length for progress tracking
-            const contentLength = response.headers.get('content-length');
-            const total = parseInt(contentLength, 10);
-            let loaded = 0;
+            const blob = await response.blob();
             
-            // Create a new ReadableStream to track progress
-            const reader = response.body.getReader();
-            const chunks = [];
+            // Create a temporary URL for the blob
+            const url = URL.createObjectURL(blob);
             
-            while(true) {
-                const {done, value} = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                loaded += value.length;
+            // For iOS devices
+            if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                // Create a temporary link and trigger download
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
                 
-                // Update progress if we have total size
-                if (total) {
-                    const progress = (loaded / total) * 100;
-                    downloadLink.textContent = `Đang tải xuống... ${Math.round(progress)}%`;
-                }
+                // Add to document and trigger click
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show instructions for iOS
+                alert('Để lưu video:\n1. Nhấn giữ video\n2. Chọn "Lưu video"\n3. Video sẽ được lưu vào thư viện ảnh');
+            } 
+            // For Android devices
+            else if (/Android/i.test(navigator.userAgent)) {
+                // Try to use the native download manager
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', 'photobooth_video.mp4');
+                link.setAttribute('target', '_blank');
+                link.setAttribute('rel', 'noopener noreferrer');
+                
+                // Add to document and trigger click
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Show instructions for Android
+                alert('Video đang được tải xuống. Vui lòng kiểm tra thư mục tải xuống của bạn.');
             }
             
-            // Combine chunks into a single Uint8Array
-            const chunksAll = new Uint8Array(loaded);
-            let position = 0;
-            for(const chunk of chunks) {
-                chunksAll.set(chunk, position);
-                position += chunk.length;
-            }
-            
-            // Create blob and save
-            const blob = new Blob([chunksAll], { type: 'video/mp4' });
-            
-            // Use FileSaver.js to handle the download
-            saveAs(blob, 'photobooth_video.mp4');
-            
-            // Show success message after a short delay
+            // Clean up the temporary URL after a delay
             setTimeout(() => {
-                alert('Video đã được tải xuống thành công!');
+                URL.revokeObjectURL(url);
             }, 1000);
             
         } catch (error) {
